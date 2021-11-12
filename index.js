@@ -27,13 +27,28 @@ async function run() {
         const database = client.db("TimeKeeper-shop");
         const productCollection = database.collection("products");
         const orderCollection = database.collection("orders");
-        const usersCollection = database.collection("users")
+        const usersCollection = database.collection("users");
         //////////
         // Get the Prodcut from Mongodb
         app.get('/products', async (req, res) => {
             const result = await productCollection.find({}).toArray();
             res.send(result)
         })
+
+        // Adding the Products
+        app.post('/addproduct', async (req, res) => {
+            const result = await productCollection.insertOne(req.body);
+            res.send(result);
+            console.log(result)
+        })
+        app.delete("/mangeDeletProduct/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await productCollection.deleteOne(query);
+            res.send(result)
+            console.log(result);
+
+        });
         // Post the Products
 
         app.post('/order', async (req, res) => {
