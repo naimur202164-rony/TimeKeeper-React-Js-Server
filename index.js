@@ -1,133 +1,184 @@
 const express = require("express");
-const app = (express());
-const port = process.env.PORT || 5000
-require('dotenv').config()
-const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const cors = require("cors");
+const { MongoClient } = require("mongodb");
 const ObjectId = require("mongodb").ObjectId;
+require("dotenv").config();
 
-// MiddleWare
-app.use(cors());
+const app = express();
+const port = process.env.PORT || 5000;
+
+//middleware
 app.use(express.json());
-// User:timekeeper
+app.use(cors());
 
-// pass:zGEDFRox4FsPWacL
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.tlrw7.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
-const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+// mongo db setup
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.xwgkc.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
+const client = new MongoClient(uri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 
-// Server
+async function server() {
+  try {
+    await client.connect();
+    const database = client.db("time_zone_db");
+    const watchCollection = database.collection("watches");
+    const reviewCollection = database.collection("reviews");
+    const orderCollection = database.collection("orders");
+    const userCollection = database.collection("users");
 
-app.get('/', (req, res) => {
-    res.send('Hello World!')
-})
+    // GET WATCHES FROM DB
+    app.get("/watches", async (req, res) => {
+      const limit = Number(req.query.limit);
+      let watches;
+      if (limit) {
+        watches = await watchCollection.find({}).limit(limit).toArray();
+      } else {
+        watches = await watchCollection.find({}).toArray();
+      }
+      res.json(watches);
+    });
 
+    //ADD NEW REVIEW TO DB
+    app.post("/reviews", async (req, res) => {
+      const review = req.body;
+      const result = await reviewCollection.insertOne(review);
+      res.json(result);
+    });
 
-// Routeinjg
-async function run() {
-    try {
-        await client.connect();
-        const database = client.db("TimeKeeper-shop");
-        const productCollection = database.collection("products");
-        const orderCollection = database.collection("orders");
-        const usersCollection = database.collection("users");
-        //////////
-        // Get the Prodcut from Mongodb
-        app.get('/products', async (req, res) => {
-            const result = await productCollection.find({}).toArray();
-            res.send(result)
-        })
+    // GET ALL REVIEWS FROM DB
+    app.get("/reviews", async (req, res) => {
+      const reviews = await reviewCollection.find({}).toArray();
+      res.json(reviews);
+    });
 
-        // Adding the Products
-        app.post('/addproduct', async (req, res) => {
-            const result = await productCollection.insertOne(req.body);
-            res.send(result);
-            console.log(result)
-        })
-        app.delete("/mangeDeletProduct/:id", async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: ObjectId(id) };
-            const result = await productCollection.deleteOne(query);
-            res.send(result)
-            console.log(result);
+    // GET A SPECIFIC WATCH BY ID NAME
+    app.get("/watch/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const watch = await watchCollection.findOne(query);
 
-        });
-        // Post the Products
+      res.json(watch);
+    });
 
-        app.post('/order', async (req, res) => {
-            const result = await orderCollection.insertOne(req.body);
-            res.send(result);
-            console.log(result)
-        })
-        app.get('/orders', async (req, res) => {
-            const email = req.query.email;
-            const query = { email: email }
-            const cursor = orderCollection.find(query);
-            const productOrderd = await cursor.toArray();
-            res.send(productOrderd)
-        })
-        // Delet items
+    //GET CURRENT USER'S ORDER
+    app.get("/my_order/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: `${email}` };
+      const result = await orderCollection.find(query).toArray();
+      res.json(result);
+    });
 
-        app.delete("/deleteProduct/:id", async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: id };
-            const result = await orderCollection.deleteOne(query);
-            res.send(result)
-            console.log(result);
+    //GET ALL ORDERS
+    app.get("/all_orders", async (req, res) => {
+      const result = await orderCollection.find({}).toArray();
+      res.json(result);
+    });
 
-        });
-        // Posting the User in the Server
-        app.post('/users', async (req, res) => {
-            const user = req.body;
-            const result = await usersCollection.insertOne(user);
-            console.log(result);
-            res.json(result);
-        });
+    // ADD NEW ORDER TO DB
+    app.post("/product/booking", async (req, res) => {
+      const product = req.body;
+      const result = await orderCollection.insertOne(product);
+      res.json(result);
+    });
 
+    //ADD NEW WATCH TO DB
+    app.post("/watches", async (req, res) => {
+      const watch = req.body;
+      const result = await watchCollection.insertOne(watch);
+      res.json(result);
+    });
 
-        // // Making admin
-        // app.put('/users/admin', async (req, res) => {
-        //     const user = req.body;
-        //     console.log("put", user)
-        //     const filter = { email: user.email }
-        //     const updateDoc = { $ser: { role: 'admin' } };
-        //     const result = await usersCollection.updateOne(filter, updateDoc);
-        //     res.send(result)
-        // })
+    // SAVE USER INFO TO DB
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const result = await userCollection.insertOne(user);
 
+      res.json(result);
+    });
 
-        app.put('/users/admin', async (req, res) => {
-            const user = req.body;
+    app.put("/users", async (req, res) => {
+      const user = req.body;
+      const filter = { email: user.email };
+      const options = { upsert: true };
+      const updateDoc = { $set: user };
+      const result = await userCollection.updateOne(filter, updateDoc, options);
+      res.json(result);
+    });
 
-            const filter = { email: user.email };
-            const updateDoc = { $set: { role: 'admin' } };
-            const result = await usersCollection.updateOne(filter, updateDoc);
-            res.json(result);
+    //CREATE A NEW ADMIN
+    app.put("/users/admin", async (req, res) => {
+      const email = req.body.email;
+      const filter = { email: email };
+      const updateDoc = { $set: { role: "admin" } };
+      const result = await userCollection.updateOne(filter, updateDoc);
+      res.json(result);
+    });
 
+    // GET A USER WITH ADMIN ROLE
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
 
-        })
-        // Geting the Admin
-        app.get('/users/:email', async (req, res) => {
-            const email = req.params.email;
-            const query = { email: email };
-            const user = await usersCollection.findOne(query);
-            let isAdmin = false
-            if (user?.role === 'admin') {
-                isAdmin = true
-            }
-            res.send({ admin: isAdmin })
-        })
+      let isAdmin = false;
+      if (user?.role === "admin") {
+        isAdmin = true;
+      }
+      res.json({ admin: isAdmin });
+    });
 
+    //GET ALL ADMINS
+    app.get("/admins", async (req, res) => {
+      const query = { role: "admin" };
+      const admins = await userCollection.find(query).toArray();
+      res.send(admins);
+    });
 
-    } finally {
-        // await client.close();
-    }
+    //UPDATE A ORDER STATUS
+    app.put("/all_orders/:id", async (req, res) => {
+      const id = req.params.id;
+      const order = req.body;
+
+      const query = { _id: ObjectId(id) };
+      const options = { upsert: true };
+      const update = {
+        $set: {
+          status: order.status,
+        },
+      };
+      const result = await orderCollection.updateOne(query, update, options);
+      res.json(result);
+    });
+
+    // DELETE A ORDER
+    app.delete("/my_order_list/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await orderCollection.deleteOne(query);
+
+      res.json(result);
+    });
+
+    // DELETE A ORDER
+    app.delete("/manage_order/watch/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await watchCollection.deleteOne(query);
+
+      res.json(result);
+    });
+  } catch {
+    // await client.close();
+  }
 }
-run().catch(console.dir);
 
+server().catch(console.dir);
 
-
-
+app.get("/", (req, res) => {
+  res.send("Hello from assignment 12");
+});
 
 app.listen(port, () => {
-    console.log(`Example app listening at http://localhost:${port}`)
-})
+  console.log("server running on", port);
+});
